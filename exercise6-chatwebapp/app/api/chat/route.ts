@@ -6,7 +6,7 @@ type Msg = { role: 'user' | 'assistant'; content: string }
 
 export async function POST(req: Request) {
   try {
-    const { messages, model } = (await req.json()) as { messages: Msg[]; model?: string }
+    const { messages, model, persona } = (await req.json()) as { messages: Msg[]; model?: string; persona?: string }
     if (!Array.isArray(messages)) {
       return new Response(JSON.stringify({ error: 'Invalid body' }), { status: 400 })
     }
@@ -16,9 +16,15 @@ export async function POST(req: Request) {
       return new Response(JSON.stringify({ error: 'Missing OPENAI_API_KEY' }), { status: 500 })
     }
 
+    const inputMsgs: any[] = []
+    if (persona && String(persona).trim().length > 0) {
+      inputMsgs.push({ role: 'system', content: `You are ${String(persona).trim()}. Stay in character but be helpful and concise.` })
+    }
+    inputMsgs.push(...messages.map(m => ({ role: m.role, content: m.content })))
+
     const resp = await client.responses.create({
       model: model || 'gpt-4o-mini',
-      input: messages.map(m => ({ role: m.role, content: m.content })),
+      input: inputMsgs,
     })
 
     const text = (resp as any).output_text ?? ''

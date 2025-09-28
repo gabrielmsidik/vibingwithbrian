@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Input } from "@/components/ui/input"
 
 type Msg = { role: 'user' | 'assistant'; content: string; meta?: { durationSec?: number; costUSD?: number; inputTokens?: number; outputTokens?: number } }
 
@@ -17,6 +18,21 @@ export default function Home() {
   const [thinking, setThinking] = useState<string>("")
   const thinkTimer = useRef<number | null>(null)
   
+  const [persona, setPersona] = useState<string>("")
+  const [started, setStarted] = useState<boolean>(false)
+
+  const examples = [
+    "a witty pirate captain",
+    "a zen tea master",
+    "a snarky stand‑up comic",
+    "an enthusiastic space tour guide",
+    "a noir detective",
+    "a helpful grandma coder",
+  ]
+  function randomPersona() {
+    return examples[Math.floor(Math.random() * examples.length)]
+  }
+
 
   async function send() {
     if (!input.trim() || sending) return
@@ -24,13 +40,14 @@ export default function Home() {
     setMessages(next)
     setInput("")
     setSending(true)
+    if (!started) setStarted(true)
     startThinking()
     try {
       const t0 = performance.now()
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messages: next, model }),
+        body: JSON.stringify({ messages: next, model, persona: persona.trim() }),
       })
       const { text, usage } = await res.json()
       stopThinking()
@@ -134,6 +151,38 @@ export default function Home() {
           </div>
         </CardHeader>
         <CardContent className="grid gap-3">
+          <div className="grid gap-2">
+            <div className="flex items-center gap-2 text-xs">
+              <Input
+                value={persona}
+                onChange={e => setPersona(e.target.value)}
+                placeholder={`persona (e.g. "${examples[0]}")`}
+              />
+              <Button variant="outline" onClick={() => setPersona(randomPersona())}>Random</Button>
+              <Button variant="ghost" onClick={() => setPersona("")}>Clear</Button>
+            </div>
+            {!started && (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e as any).nativeEvent?.isComposing) return
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      if (input.trim() && !sending) send()
+                    }
+                  }}
+                  placeholder="Ask me anything..."
+                  className="h-14 text-base rounded-2xl"
+                />
+                <Button onClick={send} disabled={sending || !input.trim()} aria-label="Send">
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
+          </div>
+          {started && (
           <ScrollArea className="h-[60vh] rounded-lg border border-border/60 p-4 bg-background/40 backdrop-blur-sm">
             <div className="grid gap-3">
               {messages.map((m, i) => (
@@ -160,6 +209,8 @@ export default function Home() {
               ))}
             </div>
           </ScrollArea>
+          )}
+          {started && (
           <div className="flex gap-2">
             <Textarea
               ref={inputRef}
@@ -185,7 +236,8 @@ export default function Home() {
               <Send className="h-4 w-4" />
             </Button>
           </div>
-          <div className="text-xs text-muted-foreground/80 select-none">Enter to send • Shift+Enter for newline • Cmd/Ctrl+Enter to send</div>
+          )}
+          {started && (<div className="text-xs text-muted-foreground/80 select-none">Enter to send • Shift+Enter for newline • Cmd/Ctrl+Enter to send</div>)}
         </CardContent>
       </Card>
     </main>
