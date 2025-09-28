@@ -1,0 +1,9 @@
+@import "tailwindcss";
+
+/* Tailwind v4 base reset customizations can go here if needed */
+html, body, #root {
+  height: 100%;
+}
+body {
+  background: transparent;
+}
