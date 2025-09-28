@@ -53,6 +53,8 @@ export default function SnakeGame() {
     const canvas = canvasRef.current!
     const ctx = canvas.getContext('2d')!
 
+    // grid visuals (placeholder for future caching if needed)
+
     const setupCanvas = () => {
       const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1))
       const logical = Math.min(canvas.clientWidth || 480, 560 - 20)
@@ -169,36 +171,29 @@ export default function SnakeGame() {
       const h = w
       ctx.clearRect(0, 0, w, h)
 
-      ctx.fillStyle = '#0b1220'
+      // background gradient for depth
+      const bg = ctx.createLinearGradient(0, 0, 0, h)
+      bg.addColorStop(0, '#0b1220')
+      bg.addColorStop(1, '#0a0f1a')
+      ctx.fillStyle = bg
       ctx.fillRect(0, 0, w, h)
 
-      ctx.strokeStyle = 'rgba(255,255,255,0.05)'
-      ctx.lineWidth = 1
-      for (let i = 0; i <= GRID_SIZE; i++) {
-        const p = i * cell + 0.5
-        ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, h); ctx.stroke()
-        ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(w, p); ctx.stroke()
-      }
+      // checkerboard + grid lines
+      drawGrid(ctx, cell, w, h)
 
-      // food
-      ctx.fillStyle = getFoodColor()
-      roundRectFill(ctx, foodRef.current.x * cell, foodRef.current.y * cell, cell, cell, Math.max(3, Math.floor(cell * 0.25)))
+      // food sprite (apple)
+      drawApple(ctx, foodRef.current.x, foodRef.current.y, cell)
 
-      // snake
+      // snake sprites
       const snake = snakeRef.current
       for (let i = snake.length - 1; i >= 0; i--) {
         const seg = snake[i]
         const isHead = i === 0
-        ctx.fillStyle = isHead ? '#34d399' : '#10b981'
-        roundRectFill(ctx, seg.x * cell, seg.y * cell, cell, cell, isHead ? Math.max(4, Math.floor(cell * 0.28)) : Math.max(3, Math.floor(cell * 0.22)))
+        drawSnakeSprite(ctx, seg.x, seg.y, cell, isHead, dirRef.current)
       }
     }
 
-    const getFoodColor = () => {
-      const t = Date.now() * 0.004
-      const a = Math.sin(t) * 0.25 + 0.75
-      return `rgba(245, 158, 11, ${a.toFixed(2)})`
-    }
+    // const getPulse = () => Math.sin(Date.now() * 0.004) * 0.25 + 0.75
 
     const onKeyDown = (e: KeyboardEvent) => {
       const k = e.key
@@ -284,6 +279,126 @@ function roundRectFill(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
   ctx.arcTo(x, y, x + w, y, rr)
   ctx.closePath()
   ctx.fill()
+}
+
+function drawGrid(ctx: CanvasRenderingContext2D, cell: number, w: number, h: number) {
+  // subtle checkerboard
+  ctx.save()
+  for (let y = 0; y < h; y += cell) {
+    for (let x = 0; x < w; x += cell) {
+      if (((x / cell) + (y / cell)) % 2 === 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.02)'
+        ctx.fillRect(x, y, cell, cell)
+      }
+    }
+  }
+  // fine grid lines
+  ctx.strokeStyle = 'rgba(255,255,255,0.05)'
+  ctx.lineWidth = 1
+  for (let i = 0; i <= w / cell; i++) {
+    const p = i * cell + 0.5
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, h); ctx.stroke()
+  }
+  for (let i = 0; i <= h / cell; i++) {
+    const p = i * cell + 0.5
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(w, p); ctx.stroke()
+  }
+  // heavier lines every 4 cells
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+  ctx.lineWidth = 1.5
+  for (let i = 0; i <= w / cell; i += 4) {
+    const p = i * cell + 0.5
+    ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, h); ctx.stroke()
+  }
+  for (let i = 0; i <= h / cell; i += 4) {
+    const p = i * cell + 0.5
+    ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(w, p); ctx.stroke()
+  }
+  ctx.restore()
+}
+
+function drawApple(ctx: CanvasRenderingContext2D, gx: number, gy: number, cell: number) {
+  const x = gx * cell
+  const y = gy * cell
+  const cx = x + cell / 2
+  const cy = y + cell / 2
+  const r = Math.max(4, Math.floor(cell * 0.32))
+
+  // glow
+  ctx.save()
+  ctx.shadowColor = 'rgba(255, 100, 0, 0.35)'
+  ctx.shadowBlur = Math.max(8, Math.floor(cell * 0.6))
+
+  // body gradient
+  const g = ctx.createRadialGradient(cx + r * 0.25, cy - r * 0.25, r * 0.2, cx, cy, r)
+  g.addColorStop(0, '#ffb199')
+  g.addColorStop(1, '#e24a3b')
+  ctx.fillStyle = g
+  ctx.beginPath()
+  ctx.arc(cx, cy, r, 0, Math.PI * 2)
+  ctx.fill()
+
+  // leaf
+  ctx.fillStyle = '#2dd4bf'
+  ctx.beginPath()
+  ctx.ellipse(cx + r * 0.3, cy - r * 0.9, r * 0.28, r * 0.16, -0.6, 0, Math.PI * 2)
+  ctx.fill()
+
+  // highlight
+  ctx.fillStyle = 'rgba(255,255,255,0.65)'
+  ctx.beginPath()
+  ctx.ellipse(cx - r * 0.3, cy - r * 0.25, r * 0.18, r * 0.12, -0.5, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.restore()
+}
+
+function drawSnakeSprite(ctx: CanvasRenderingContext2D, gx: number, gy: number, cell: number, isHead: boolean, dir: Point) {
+  const x = gx * cell
+  const y = gy * cell
+  const pad = Math.floor(cell * 0.12)
+  const w = cell - pad * 2
+  const h = cell - pad * 2
+  const r = Math.max(4, Math.floor(cell * (isHead ? 0.28 : 0.22)))
+  const base = isHead ? '#34d399' : '#10b981'
+  const darker = isHead ? '#1f8f76' : '#0e846a'
+
+  ctx.save()
+  ctx.shadowColor = 'rgba(0,0,0,0.35)'
+  ctx.shadowBlur = Math.max(6, Math.floor(cell * 0.35))
+  ctx.shadowOffsetY = 1
+
+  // gradient to give volume
+  const grad = ctx.createLinearGradient(x + pad, y + pad, x + pad, y + pad + h)
+  grad.addColorStop(0, base)
+  grad.addColorStop(1, darker)
+  ctx.fillStyle = grad
+  roundRectFill(ctx, x + pad, y + pad, w, h, r)
+
+  // outline
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)'
+  ctx.lineWidth = Math.max(1, Math.floor(cell * 0.06))
+  ctx.stroke()
+
+  if (isHead) {
+    // eyes based on direction
+    const ex = x + pad + w / 2
+    const ey = y + pad + h / 2
+    const off = Math.max(2, Math.floor(cell * 0.12))
+    const eyeR = Math.max(2, Math.floor(cell * 0.08))
+    const pupilR = Math.max(1, Math.floor(cell * 0.04))
+    const dx = Math.sign(dir.x)
+    const dy = Math.sign(dir.y)
+    const leftEyeX = ex - off + dx * eyeR * 0.6
+    const rightEyeX = ex + off + dx * eyeR * 0.6
+    const eyesY = ey - off * 0.2 + dy * eyeR * 0.6
+    ctx.fillStyle = '#fff'
+    ctx.beginPath(); ctx.arc(leftEyeX, eyesY, eyeR, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(rightEyeX, eyesY, eyeR, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = '#111827'
+    ctx.beginPath(); ctx.arc(leftEyeX + dx * 1.2, eyesY + dy * 1.2, pupilR, 0, Math.PI * 2); ctx.fill()
+    ctx.beginPath(); ctx.arc(rightEyeX + dx * 1.2, eyesY + dy * 1.2, pupilR, 0, Math.PI * 2); ctx.fill()
+  }
+  ctx.restore()
 }
 
 

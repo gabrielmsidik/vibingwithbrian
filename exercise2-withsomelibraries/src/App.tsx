@@ -4,7 +4,7 @@ import SnakeGame from './components/SnakeGame'
 
 function App() {
   return (
-    <div className="relative min-h-screen w-full text-slate-100">
+    <div className="relative min-h-screen w-full text-slate-100 bg-transparent">
       <LiquidEther
             colors={[ '#5227FF', '#FF9FFC', '#B19EEF' ]}
             mouseForce={20}
@@ -16,8 +16,8 @@ function App() {
             resolution={0.5}
             isBounce={false}
             autoDemo={true}
-            autoSpeed={0.5}
-            autoIntensity={2.2}
+            autoSpeed={0.8}
+            autoIntensity={3}
             takeoverDuration={0.25}
             autoResumeDelay={3000}
             autoRampDuration={0.6}

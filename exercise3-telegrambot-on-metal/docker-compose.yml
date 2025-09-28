@@ -1,0 +1,7 @@
+services:
+  bot:
+    build: .
+    container_name: exercise5-telegrambot
+    restart: unless-stopped
+    env_file:
+      - .env

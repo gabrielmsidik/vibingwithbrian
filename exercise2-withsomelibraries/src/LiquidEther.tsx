@@ -54,8 +54,10 @@ export default function LiquidEther(props: LiquidEtherProps) {
       uTime: { value: 0 },
       uResolution: { value: new THREE.Vector2(width, height) },
       uMouse: { value: new THREE.Vector2(-10, -10) },
-      uRadius: { value: Math.max(0.03, Math.min(0.25, (props.cursorSize ?? 80) / Math.min(width, height))) },
-      uHighlight: { value: 0.12 },
+      uRadius: { value: Math.max(0.02, Math.min(0.2, (props.cursorSize ?? 80) / Math.min(width, height))) },
+      uHighlight: { value: 0.16 },
+      uAmp: { value: 0.75 },
+      uFlow: { value: 0.42 },
       uColors: {
         value: (props.colors || ['#5227FF', '#FF9FFC', '#B19EEF']).map(
           (c) => new THREE.Color(c)
@@ -80,15 +82,32 @@ export default function LiquidEther(props: LiquidEtherProps) {
         uniform vec2 uMouse;
         uniform float uRadius;
         uniform float uHighlight;
+        uniform float uAmp;
+        uniform float uFlow;
         uniform vec3 uColors[3];
         varying vec2 vUv;
 
+        mat2 rot(float a){ float s = sin(a), c = cos(a); return mat2(c,-s,s,c); }
+
         void main() {
           vec2 uv = vUv;
-          // wobble mix
-          float w = sin(uTime * 0.5 + uv.x * 6.283) * 0.12 + cos(uTime * 0.8 + uv.y * 6.283) * 0.10;
-          vec3 col = mix(uColors[0], uColors[1], uv.x + w);
-          col = mix(col, uColors[2], uv.y - w);
+          float t = uTime;
+          // vivid liquid warp with layered swirls
+          vec2 p = uv - 0.5;
+          p *= rot(sin(t*0.25)*0.5);
+          for(int i=0;i<4;i++){
+            p += uAmp * 0.12 * sin( (p.yx*6.0 + float(i)*1.7) + t*0.9 );
+            p *= rot(0.7 + float(i)*0.35);
+          }
+          vec2 q = p + 0.5;
+
+          // base gradient
+          vec3 col = mix(uColors[0], uColors[1], clamp(q.x, 0.0, 1.0));
+          col = mix(col, uColors[2], clamp(q.y, 0.0, 1.0));
+          // animated flow overlay to ensure visible motion
+          float flow = sin(q.x*10.0 + t*0.9) + cos(q.y*11.0 - t*1.1) + sin((q.x+q.y)*8.0 + t*0.7);
+          flow = 0.5 + 0.5*sin(flow);
+          col = mix(col, vec3(1.0) - col, flow * uFlow);
 
           // mouse highlight (soft, smaller)
           vec2 m = uMouse / uResolution;
@@ -119,6 +138,16 @@ export default function LiquidEther(props: LiquidEtherProps) {
     const animate = () => {
       const t = performance.now()
       uniforms.uTime.value = (t - start) / 1000
+      if (props.autoDemo) {
+        const seconds = uniforms.uTime.value
+        const cx = width * 0.5
+        const cy = height * 0.5
+        const r = Math.min(width, height) * 0.25 * (props.autoIntensity ?? 2.2) * 0.18
+        const spd = (props.autoSpeed ?? 0.5) * 0.8
+        const x = cx + Math.cos(seconds * spd) * r
+        const y = cy + Math.sin(seconds * spd * 1.1) * r
+        uniforms.uMouse.value.set(x, y)
+      }
       renderer.render(scene, camera)
       requestRef.current = requestAnimationFrame(animate)
     }
@@ -154,7 +183,7 @@ export default function LiquidEther(props: LiquidEtherProps) {
     }
   }, [props.colors])
 
-  return <div ref={mountRef} style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: -1, pointerEvents: 'none' }} />
+  return <div ref={mountRef} style={{ position: 'fixed', inset: 0, width: '100vw', height: '100vh', zIndex: 0, pointerEvents: 'none' }} />
 }
 
 
