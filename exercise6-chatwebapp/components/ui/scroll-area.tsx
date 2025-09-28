@@ -8,7 +8,7 @@ export const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
     return (
       <div
         ref={ref}
-        className={cn("overflow-y-auto [scrollbar-gutter:stable]", className)}
+        className={cn("overflow-y-auto [scrollbar-gutter:stable] themed-scrollbar", className)}
         {...props}
       />
     )

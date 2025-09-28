@@ -58,3 +58,25 @@ body::before {
               radial-gradient(900px 600px at 80% 110%, rgba(0,0,0,0.25), transparent 60%);
   z-index: 0;
 }
+
+/* Sleek themed scrollbar */
+.themed-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in oklab, var(--color-foreground) 20%, transparent) transparent;
+}
+.themed-scrollbar::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.themed-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.themed-scrollbar::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--color-foreground) 16%, transparent), color-mix(in oklab, var(--color-foreground) 28%, transparent));
+}
+.themed-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(to bottom, color-mix(in oklab, var(--color-foreground) 26%, transparent), color-mix(in oklab, var(--color-foreground) 40%, transparent));
+}

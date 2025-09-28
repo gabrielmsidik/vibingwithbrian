@@ -20,6 +20,10 @@ export default function Home() {
   
   const [persona, setPersona] = useState<string>("")
   const [started, setStarted] = useState<boolean>(false)
+  const [sessionId, setSessionId] = useState<string>('')
+  const [chats, setChats] = useState<any[]>([])
+  const [activeChatId, setActiveChatId] = useState<string | null>(null)
+  const [pendingChatId, setPendingChatId] = useState<string | null>(null)
 
   const examples = [
     "a witty pirate captain",
@@ -33,10 +37,82 @@ export default function Home() {
     return examples[Math.floor(Math.random() * examples.length)]
   }
 
+  async function refreshChats() {
+    if (!sessionId) return
+    try {
+      const res = await fetch(`/api/chats?sessionId=${encodeURIComponent(sessionId)}`)
+      const data = await res.json()
+      setChats(data.chats || [])
+      if (!activeChatId && data.chats?.[0]?.id) setActiveChatId(data.chats[0].id)
+    } catch {}
+  }
+
+  // Debug fetch (optional): try ?all=1 if session-bound query returns empty
+  useEffect(() => {
+    if (!sessionId) return
+    if (chats.length === 0) {
+      ;(async () => {
+        try {
+          const res = await fetch(`/api/chats?all=1`)
+          const data = await res.json()
+          if ((data.chats || []).length > 0 && !activeChatId) {
+            setChats(data.chats)
+          }
+        } catch {}
+      })()
+    }
+  }, [sessionId, chats.length])
+
+  async function newChat() {
+    const res = await fetch('/api/chats', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sessionId, title: 'New chat', persona, model }) })
+    const data = await res.json()
+    if (data.chat?.id) {
+      setChats(prev => [data.chat, ...prev])
+      setActiveChatId(data.chat.id)
+      setPendingChatId(data.chat.id)
+      setMessages([])
+      setStarted(false)
+    }
+  }
+
+  async function selectChat(id: string) {
+    setActiveChatId(id)
+    setPendingChatId(null)
+    try {
+      const res = await fetch(`/api/chats/${id}/messages`)
+      const data = await res.json()
+      const loaded: Msg[] = (data.messages || []).map((m: any): Msg => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: String(m.content || ''),
+      }))
+      setMessages(loaded)
+      setStarted(true)
+    } catch {}
+  }
+
+  useEffect(() => {
+    try {
+      let sid = undefined as string | undefined
+      if (typeof window !== 'undefined') {
+        sid = window.localStorage.getItem('chat.sessionId') || undefined
+        if (!sid) {
+          const rnd = (globalThis as any)?.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)
+          sid = rnd
+          window.localStorage.setItem('chat.sessionId', sid as string)
+        }
+      }
+      setSessionId(typeof sid === 'string' && sid.length > 0 ? sid : Math.random().toString(36).slice(2))
+    } catch {
+      setSessionId(Math.random().toString(36).slice(2))
+    }
+  }, [])
+
+  useEffect(() => { refreshChats() }, [sessionId])
+
 
   async function send() {
     if (!input.trim() || sending) return
-    const next = [...messages, { role: 'user', content: input.trim() }]
+    const next: Msg[] = [...messages, { role: 'user', content: input.trim() } as Msg]
     setMessages(next)
     setInput("")
     setSending(true)
@@ -44,14 +120,22 @@ export default function Home() {
     startThinking()
     try {
       const t0 = performance.now()
+      const chatIdToUse = pendingChatId ?? (started ? activeChatId : null)
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ messages: next, model, persona: persona.trim() }),
+        body: JSON.stringify({ messages: next, model, persona: persona.trim(), sessionId, chatId: chatIdToUse || undefined }),
       })
-      const { text, usage } = await res.json()
+      const { text, usage, chatId } = await res.json()
       stopThinking()
       await typeAppend(text)
+      // if we created a brand new chat (no chatIdToUse), add it locally and activate
+      if (chatId && !chatIdToUse) {
+        setActiveChatId(chatId)
+        setChats(prev => [{ id: chatId, title: (next[next.length-1]?.content || 'New chat').slice(0,60), persona, model, created_at: new Date().toISOString() }, ...prev])
+      }
+      // clear pending once first message is sent
+      if (pendingChatId) setPendingChatId(null)
       const t1 = performance.now()
       const secsNum = (t1 - t0) / 1000
       // simple price table (USD per 1K tokens) — adjust if your pricing differs
@@ -96,7 +180,7 @@ export default function Home() {
       setThinking(dots[i])
     }, 100)
     // show a placeholder assistant bubble while thinking
-    setMessages(m => [...m, { role: 'assistant', content: '' }])
+    setMessages(m => [...m, { role: 'assistant', content: '' } as Msg])
   }
 
   function stopThinking() {
@@ -109,7 +193,7 @@ export default function Home() {
     setMessages(m => {
       const copy = [...m]
       const idx = copy.slice().reverse().findIndex(mm => mm.role === 'assistant')
-      if (idx === -1) return [...copy, { role: 'assistant', content: full }]
+      if (idx === -1) return [...copy, { role: 'assistant', content: full } as Msg]
       const realIdx = copy.length - 1 - idx
       copy[realIdx] = { role: 'assistant', content: '' }
       return copy
@@ -123,7 +207,7 @@ export default function Home() {
         setMessages(m => {
           const copy = [...m]
           const idx = copy.slice().reverse().findIndex(mm => mm.role === 'assistant')
-          if (idx === -1) return [...copy, { role: 'assistant', content: cur }]
+          if (idx === -1) return [...copy, { role: 'assistant', content: cur } as Msg]
           const realIdx = copy.length - 1 - idx
           copy[realIdx] = { role: 'assistant', content: cur }
           return copy
@@ -151,6 +235,27 @@ export default function Home() {
           </div>
         </CardHeader>
         <CardContent className="grid gap-3">
+          <div className="flex gap-2 overflow-x-auto pb-1 items-center">
+            <Button variant="outline" onClick={newChat}>+ New</Button>
+            {chats.map(c => (
+              <div key={c.id} className="flex items-center gap-1">
+                <Button variant={activeChatId === c.id ? 'default' : 'ghost'} onClick={() => selectChat(c.id)} className="truncate max-w-[160px]">
+                  {c.title || 'Chat'}
+                </Button>
+                <Button variant="ghost" onClick={async () => {
+                  try {
+                    await fetch(`/api/chats/${c.id}`, { method: 'DELETE' })
+                    setChats(prev => prev.filter(x => x.id !== c.id))
+                    if (activeChatId === c.id) {
+                      setActiveChatId(null)
+                      setMessages([])
+                      setStarted(false)
+                    }
+                  } catch {}
+                }}>✕</Button>
+              </div>
+            ))}
+          </div>
           <div className="grid gap-2">
             <div className="flex items-center gap-2 text-xs">
               <Input
